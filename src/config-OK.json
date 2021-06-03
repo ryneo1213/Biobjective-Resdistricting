@@ -1,4 +1,0 @@
-{
-  "run11": {"state": "OK", "level": "county", "base": "labeling", "fixing": true, "contiguity": "lcut", "symmetry": "orbitope", "extended": true, "order": "B_decreasing", "heuristic": true, "lp": false}
-}
-  
