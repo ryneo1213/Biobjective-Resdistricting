@@ -1,0 +1,6 @@
+run,iteration,state,level,k,L,U,n,m,heur_obj,heur_time,heur_iter,B_q,B_size,B_time,B_timelimit,DFixings,LFixings,UFixings_X,UFixings_R,ZFixings,MIP_obj,MIP_bound,MIP_time,MIP_timelimit,MIP_status,MIP_nodes,callbacks,lazy_cuts,connected
+run1,1,AR,county,4,725335,732624,75,192,33,420.52,10000,4,64,10.72,60,6,262,1,8,20,33,33.0,38.83,3600,2,34045,0,0,True
+run1,2,AR,county,4,725335,732624,75,192,33,420.52,10000,4,64,10.72,60,0,0,0,0,20,33,33.0,43.11,3600,2,41491,0,0,True
+run1,3,AR,county,4,725335,732624,75,192,33,420.52,10000,4,64,10.72,60,0,0,0,0,20,34,34.0,238.51,3600,2,58846,0,0,True
+run1,4,AR,county,4,725335,732624,75,192,33,420.52,10000,4,64,10.72,60,0,0,0,0,20,34,34.0,322.52,3600,2,67176,0,0,True
+run1,4,AR,county,4,725335,732624,75,192,33,420.52,10000,4,64,10.72,60,0,0,0,0,20,no_solution_found,31.0,1650.14,3600,11,797466,0,0,n/a
