@@ -54,7 +54,7 @@ def do_Labeling_ZFixing(m, G, k):
     return ZFixings
 
 
-def do_Labeling_LFixing(m, G, population, L, ordering, k):
+def do_Labeling_LFixing(m, G, population, ordering, k, L):
     LFixings = 0
     
     # find "back" of ordering B = {v_q, v_{q+1}, ..., v_{n-1} }
@@ -93,7 +93,7 @@ def do_Labeling_LFixing(m, G, population, L, ordering, k):
     m.update()
     return LFixings 
 
-def do_Labeling_UFixing(m, DG, population, U, ordering, k):
+def do_Labeling_UFixing(m, DG, population, ordering, k, U):
     UFixings_X = 0
     UFixings_R = 0
     DG = m._DG
@@ -106,7 +106,7 @@ def do_Labeling_UFixing(m, DG, population, U, ordering, k):
         dist = nx.shortest_path_length(DG,source=v,weight='ufixweight')
         
         if j == 0:
-            min_dist = U+1
+            min_dist = U + 1
         else:
             min_dist = min( dist[ordering[t]] + population[v] for t in range(j) )
         

@@ -21,7 +21,7 @@ def find_ordering(B, DG, population):
 
     
 
-def solve_maxB_problem(DG, population, L, k, heuristic_districts):
+def solve_maxB_problem(DG, population, m, k, lowFix, heuristic_districts):
     m = gp.Model()
     m.params.LogToConsole = 0 # keep log to a minimum
     q = k
@@ -36,7 +36,7 @@ def solve_maxB_problem(DG, population, L, k, heuristic_districts):
     m.addConstrs( gp.quicksum(X[i,j] for j in range(q)) == B[i] for i in DG.nodes )
                 
     # bin population should be less than L
-    m.addConstrs( gp.quicksum(population[i] * X[i,j] for i in DG.nodes) <= L-1 for j in range(q) )
+    m.addConstrs( gp.quicksum(population[i] * X[i,j] for i in DG.nodes) <= lowFix - 1 for j in range(q) )
     
     # bins shouldn't touch each other
     m.addConstrs( X[u,j] + B[v] <= 1 + X[v,j] for u,v in DG.edges for j in range(q) )

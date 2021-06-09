@@ -2,26 +2,19 @@ import gurobipy as gp
 from gurobipy import GRB 
 import math
 
-def add_base_constraints(m, population,k):
+def add_base_constraints(m, U, L, population,k):
     DG = m._DG # bidirected version of G
     
-    # Each vertex i assigned to one district
-    m.addConstrs(gp.quicksum(m._X[i,j] for j in range(k)) == 1 for i in DG.nodes)
+
     
     #Add U and L Constraints
-    m._UB.lb = math.floor(sum(population) / k)
-    m._UB.ub = math.floor(sum(population) / k * 1.005)
+   # m._UB.lb = math.floor(sum(population) / k)
+    #m._UB.ub = math.floor(sum(population) / k * 1.005)
     
-    m._LB.ub = math.floor(sum(population) / k)
-    m._LB.lb = math.ceil(sum(population) / k * 0.995)
+    #m._LB.ub = math.floor(sum(population) / k)
+    #m._LB.lb = math.ceil(sum(population) / k * 0.995)
     
-    #Add P Constraints
-    m._P = m.addVars(range(k), vtype = GRB.INTEGER)
-    m.addConstrs(gp.quicksum(population[i] * m._X[i,j] for i in DG.nodes) == m._P[j] for j in range(k))
-    
-    # Population balance: population assigned to district j should be in [L,U]
-    m.addConstrs(m._P[j] <= m._UB for j in range(k))
-    m.addConstrs(m._P[j] >= m._LB for j in range(k)) 
+    m.update()
     
  
 def add_objective(m, G, k):
@@ -46,7 +39,7 @@ def most_possible_nodes_in_one_district(population, U):
         if cumulative_population > U:
             return num_nodes - 1
              
-def add_scf_constraints(m, G):
+def add_scf_constraints(m, G, U):
     DG = m._DG
     k = m._k
     
@@ -54,7 +47,7 @@ def add_scf_constraints(m, G):
     f = m.addVars(DG.edges, vtype=GRB.CONTINUOUS)
     
     # compute big-M    
-    M = most_possible_nodes_in_one_district(m._population, m._U) - 1
+    M = most_possible_nodes_in_one_district(m._population, U) - 1
     
     # the following constraints are weaker than some in the orbitope EF
     m.addConstrs( gp.quicksum(m._R[i,j] for i in DG.nodes)==1 for j in range(k) )

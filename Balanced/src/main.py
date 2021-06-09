@@ -26,7 +26,7 @@ import os
 import labeling
 import ordering
 import fixing
-import iterate
+#import iterate
 
 from gerrychain import Graph
 import geopandas as gpd
@@ -224,21 +224,14 @@ for key in batch_configs.keys():
     k = number_of_congressional_districts[state]        
     population = [G.nodes[i]['TOTPOP'] for i in G.nodes()]    
     deviation = 0.01
-    
-    L = math.ceil((1-deviation/2)*sum(population)/k)
-    U = math.floor((1 + deviation/2) *sum(population)/k)
+    U = math.floor((1 + deviation / 2) * (sum(population) / k))
+    L = math.ceil((1 - deviation / 2) * (sum(population) / k))    
     ideal = math.floor(sum(population) / k)
 
-    print("L =",L,", U =",U,", k =",k)
+    print("k =",k)
     result['k'] = k
     result['n'] = G.number_of_nodes()
     result['m'] = G.number_of_edges()
-    
-    # abort early for trivial or overtly infeasible instances
-    maxp = max(population[i] for i in G.nodes)
-    if k==1 or maxp>U:
-        print("k=",k,", max{ p_v | v in V } =",maxp,", U =",U,end='.')
-        sys.exit("Aborting early, either due to trivial instance or overtly infeasible instance.")
            
     # read heuristic solution from external file (?)
 
@@ -260,11 +253,25 @@ for key in batch_configs.keys():
    
     # X[i,j]=1 if vertex i is assigned to district j in {0,1,2,...,k-1}
     m._X = m.addVars(DG.nodes, range(k), vtype=GRB.BINARY)
-    m._UB = m.addVar(vtype = GRB.INTEGER)
-    m._LB = m.addVar(vtype = GRB.INTEGER)
+    #m._UB = m.addVar(vtype = GRB.INTEGER)
+    #m._LB = m.addVar(vtype = GRB.INTEGER)
 
     m._R = m.addVars(DG.nodes, range(k), vtype=GRB.BINARY)
-    labeling.add_base_constraints(m, population, k)
+    labeling.add_base_constraints(m, U, L, population, k)
+    #lowFix = m._LB.lb
+    #highFix = m._UB.ub
+    
+    # Each vertex i assigned to one district
+    m.addConstrs(gp.quicksum(m._X[i,j] for j in range(k)) == 1 for i in DG.nodes)
+    
+    #Add P Constraints
+    m._P = m.addVars(range(k), vtype = GRB.INTEGER)
+    m.addConstrs(gp.quicksum(population[i] * m._X[i,j] for i in DG.nodes) == m._P[j] for j in range(k))
+    
+    # Population balance: population assigned to district j should be in [L,U]
+    U_constraint = m.addConstrs(m._P[j] <= U for j in range(k))
+    L_constraint = m.addConstrs(m._P[j] >= L for j in range(k))
+    m.update()
     
                 
     ############################################   ONLY DO ONCE   
@@ -278,7 +285,7 @@ for key in batch_configs.keys():
     # Vertex ordering and max B problem 
     ############################################  
     
-    (B, result['B_q'], result['B_time'], result['B_timelimit']) = ordering.solve_maxB_problem(DG, population, L, k, heuristic_districts)
+    (B, result['B_q'], result['B_time'], result['B_timelimit']) = ordering.solve_maxB_problem(DG, population, m, k, L, heuristic_districts)
     
     # draw set B on map and save
     fn_B = "../" + "results_for_" + config_filename_wo_extension + "/" + result['state'] + "-" + result['level'] + "-maxB.png"       
@@ -293,34 +300,32 @@ for key in batch_configs.keys():
     print("Position vector =", position)
     print("Set B =", B)
     
+    ####################################   
+    # Contiguity constraints
+    ####################################      
+            
+    m._callback = None
+    m._population = population
+    m._k = k
+        
+                        
+    
+    labeling.add_scf_constraints(m, G, U)
+    
     ######START LOOP########
     
     statusCode = 2
     iteration = 1
     
-    while (statusCode == 2 and U != L):
-    
-        ####################################   
-        # Contiguity constraints
-        ####################################      
-                
-        m._callback = None
-        m._population = population
-        m._U = U
-        m._k = k
-        
-                        
-    
-        labeling.add_scf_constraints(m, G)
-        
+    while (statusCode == 2 and iteration < 4):        
     
         ####################################   
         # Variable fixing
         ####################################    
         
         result['DFixings'] = fixing.do_Labeling_DFixing(m, G, vertex_ordering, k)
-        result['LFixings'] = fixing.do_Labeling_LFixing(m, G, population, L, vertex_ordering, k)
-        (result['UFixings_X'], result['UFixings_R']) = fixing.do_Labeling_UFixing(m, DG, population, U, vertex_ordering, k)
+        result['LFixings'] = fixing.do_Labeling_LFixing(m, G, population, vertex_ordering, k, L)
+        (result['UFixings_X'], result['UFixings_R']) = fixing.do_Labeling_UFixing(m, DG, population, vertex_ordering, k, U)
         result['ZFixings'] = fixing.do_Labeling_ZFixing(m, G, k)
     
             
@@ -363,9 +368,9 @@ for key in batch_configs.keys():
         result['MIP_status'] = statusCode
         result['MIP_nodes'] = int(m.NodeCount)
         result['MIP_bound'] = m.objBound
-        result['L'] = m._LB.lb
-        result['U'] = m._UB.ub
-        result['max_dev'] = m._UB.ub - m._LB.lb
+        result['L'] = L
+        result['U'] = U
+        result['max_dev'] = U - L
         
         # report best solution found
         if m.SolCount > 0:
@@ -419,10 +424,15 @@ for key in batch_configs.keys():
             
         ####################################   
         # Summarize results of this run to csv file
-        ####################################  
+        ####################################
         
         append_dict_as_row(results_filename,result,my_fieldnames)
-        iterate.iterate_U_and_L(m, population, U, L, k, districts)
+        dev = max(most-ideal, ideal - least)
+        U = ideal + (dev - 1)
+        L = ideal - (dev - 1)
+        U_constraint.setAttr(GRB.Attr.RHS, U)
+        L_constraint.setAttr(GRB.Attr.RHS, L)
+        m.update()
+        
         iteration += 1
         print("Ideal population = ", ideal)
-        print(U, " ", L)
