@@ -1,0 +1,5 @@
+run,iteration,state,level,k,L,U,max_dev,n,m,heur_obj,heur_time,heur_iter,B_q,B_size,B_time,B_timelimit,DFixings,LFixings,UFixings_X,UFixings_R,ZFixings,MIP_obj,MIP_bound,MIP_time,MIP_timelimit,MIP_status,MIP_nodes,connected,max_dist,min_dist,found_dev
+run1,1,KS,county,4,709714,716845,7131,105,263,32,1281.95,10000,4,95,7.46,60,6,386,11,24,34,32,32.0,16.82,3600,2,6511,True,714395.0,712119.0,2276.0
+run1,2,KS,county,4,712120.0,714438.0,2318.0,105,263,32,1281.95,10000,4,95,7.46,60,0,0,0,0,34,34,34.0,492.64,3600,2,80517,True,714022.0,712588.0,1434.0
+run1,3,KS,county,4,712537.0,714021.0,1484.0,105,263,32,1281.95,10000,4,95,7.46,60,0,0,0,0,34,36,36.0,2144.30,3600,2,400394,True,713759.0,712778.0,981.0
+run1,3,KS,county,4,712779.0,713779.0,1000.0,105,263,32,1281.95,10000,4,95,7.46,60,0,0,0,0,34,no_solution_found,33.0,3600.13,3600,9,1141186,n/a,713759.0,712778.0,981.0

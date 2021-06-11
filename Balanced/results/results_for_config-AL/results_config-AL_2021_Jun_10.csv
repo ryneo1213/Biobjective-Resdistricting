@@ -1,0 +1,2 @@
+run,iteration,state,level,k,L,U,max_dev,n,m,heur_obj,heur_time,heur_iter,B_q,B_size,B_time,B_timelimit,DFixings,LFixings,UFixings_X,UFixings_R,ZFixings,MIP_obj,MIP_bound,MIP_time,MIP_timelimit,MIP_status,MIP_nodes,connected,max_dist,min_dist,found_dev
+run1,1,AL,county,7,679406,686233,6827,67,171,55,275.48,10000,7,52,60.03,60,21,385,90,42,287,55,52.0,3600.06,3600,9,488136,True,685088.0,679453.0,5635.0
