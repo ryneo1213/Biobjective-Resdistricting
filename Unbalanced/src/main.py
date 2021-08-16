@@ -11,8 +11,8 @@ Created on Wed Jun  2 12:56:29 2021
 
 import gurobipy as gp
 from gurobipy import GRB 
-
 import matplotlib.pyplot as plt
+import numpy as np
 
 from datetime import date
 import math
@@ -26,6 +26,7 @@ import os
 import labeling
 import ordering
 import fixing
+import mindev
 
 from gerrychain import Graph
 import geopandas as gpd
@@ -104,6 +105,17 @@ def export_B_to_png(G, df, B, filename):
     plt.axis('off')
     my_fig.savefig(filename)
     
+def export_mindev_to_png(G, df, sol, filename):
+    
+    sol_geoids = [ G.nodes[i]["GEOID10"] for i in sol]
+    df['sol'] = [1 if df['GEOID10'][u] in sol_geoids else 0 for u in G.nodes]
+        
+    my_fig = df.plot(column='sol').get_figure()
+    RESIZE_FACTOR = 3
+    my_fig.set_size_inches(my_fig.get_size_inches()*RESIZE_FACTOR)
+    plt.axis('off')
+    my_fig.savefig(filename)
+    
 
 ###########################
 # Hard-coded inputs
@@ -177,7 +189,7 @@ results_filename = "../results_for_" + config_filename_wo_extension + "/results_
 # prepare csv file by writing column headers
 with open(results_filename,'w',newline='') as csvfile:   
     my_fieldnames = ['run','iteration','state','level'] # configs
-    my_fieldnames += ['k','L','U', 'max_dev', 'n','m'] # params
+    my_fieldnames += ['k', 'max_dev', 'n','m'] # params
     my_fieldnames += ['heur_obj', 'heur_time', 'heur_iter'] # heuristic info
     my_fieldnames += ['B_q', 'B_size', 'B_time', 'B_timelimit'] # max B info
     my_fieldnames += ['DFixings', 'LFixings', 'UFixings_X', 'UFixings_R', 'ZFixings'] # fixing info
@@ -232,7 +244,36 @@ for key in batch_configs.keys():
     result['k'] = k
     result['n'] = G.number_of_nodes()
     result['m'] = G.number_of_edges()
-           
+    
+    #mindev problem
+    
+    a = []
+    b = []
+    sol_a = []
+    sol_b = []
+    sol = []
+    
+    #append each optimal district for each node both from above and below
+    for i in range(G.number_of_nodes()):
+        a.append(mindev.find_ai(DG, i, k, population, U, sol_a))
+        b.append(mindev.find_bi(DG, i, k, population, U, sol_b))
+    
+    d = 0
+    
+    for i in G.nodes:
+        if a[i] > d and b[i] > d:
+            if a[i] <= b[i]:
+                d = a[i]
+                sol = sol_a[i]
+            else:
+                d = b[i]
+                sol = sol_b[i]
+                
+    fn_d = "../" + "results_for_" + config_filename_wo_extension + "/" + result['state'] + "-" + result['level'] + "-d.png"  
+
+    export_mindev_to_png(G, df, sol, fn_d)
+    minimum_deviation = d * k / (k-1)
+    
     # read heuristic solution from external file (?)
 
     heuristic_file = open('../data/'+level+"/heuristic/heur_"+state+"_"+level+".json",'r')
@@ -242,8 +283,7 @@ for key in batch_configs.keys():
     result['heur_time'] = heuristic_dict['time']
     result['heur_iter'] = heuristic_dict['iterations']
 
-        
-           
+
     ############################ ONLY DO ONCE
     # Build base model
     ############################   
@@ -291,6 +331,7 @@ for key in batch_configs.keys():
     
     (B, result['B_q'], result['B_time'], result['B_timelimit']) = ordering.solve_maxB_problem(DG, population, m, k, L, heuristic_districts)
     
+    
     # draw set B on map and save
     fn_B = "../" + "results_for_" + config_filename_wo_extension + "/" + result['state'] + "-" + result['level'] + "-maxB.png"       
     export_B_to_png(G, df, B, fn_B)
@@ -323,7 +364,7 @@ for key in batch_configs.keys():
     Xs = []
     Ys = []
     points = 0
-    
+    currY = 0
     while (statusCode == 2):        
     
         ####################################   
@@ -375,14 +416,12 @@ for key in batch_configs.keys():
         result['MIP_status'] = statusCode
         result['MIP_nodes'] = int(m.NodeCount)
         result['MIP_bound'] = m.objBound
-        result['L'] = L
-        result['U'] = U
         result['max_dev'] = max_dev
         
         # report best solution found
         if m.SolCount > 0:
             result['MIP_obj'] = int(m.objVal)
-            Ys.append(int(m.objVal))
+            Ys.append(int(m.objVal)) 
             points += 1
     
     
@@ -411,15 +450,12 @@ for key in batch_configs.keys():
             most = m._P[0].X
             least = m._P[0].X
             for j in range(k):
-                print(m._P[j].X)
                 
                 if m._P[j].X > most:
                     most = m._P[j].X
                 
                 if m._P[j].X < least:
                     least = m._P[j].X
-            print("Most: ", most)
-            print("Least: ", least)
                 
             
             result['iteration'] = iteration
@@ -442,45 +478,78 @@ for key in batch_configs.keys():
         
         max_dev = most - least
         dev_constr.setAttr(GRB.Attr.RHS, max_dev - 1)
-        print(max_dev)
-
+        
         m.update()
         
         iteration += 1
-        print("Ideal population = ", ideal)
         
     openX = []
     openY = []
     temp = points
     
+    i = points - 1
+    while i >= 0:
+        if Ys[i] == currY:
+            Xs.pop(i)
+            Ys.pop(i)
+            points -= 1
+        else:
+            currY = Ys[i]
+        i -= 1
+    
     for i in range(points - 1):
         openX.append(Xs[i])
         openY.append(Ys[i + 1])
+        
         
     print(Xs)
     print(Ys)
     print(openX)
     
-    '''Plotting process'''
-    fig= plt.figure(figsize=(10,5))
-    plt.xlim(0, ideal * 0.011)
-    plt.scatter(openX, openY, facecolors = 'w', edgecolors = 'b')
-    plt.scatter(Xs, Ys)
-    plt.scatter(ideal * 0.01, Ys[0], edgecolors = 'b', facecolors = 'b')
-    plt.title("Population Deviation vs. Cut Edges for " + state)
+    #Plotting Pareto Chart
+    fig, ax = plt.subplots(figsize =(12,6))
+    ax.set_xlim(-750, ideal * 0.011)
+    ax.set_ylim(min(Ys) - 2, max(Ys) + 5)
+    ax.scatter(openX, openY, facecolors = 'w', edgecolors = 'b')
+    ax.scatter(Xs, Ys)
+    ax.scatter(ideal * 0.01, Ys[0], edgecolors = 'b', facecolors = 'b')
+    ax.title.set_text("Unbalanced Window Population Deviation vs. Cut Edges for " + state)
     
     for i in range(points - 1):
         plt.hlines(Ys[i + 1], Xs[i + 1], Xs[i], colors = 'blue')
         
     plt.hlines(Ys[0], max(Xs), ideal * 0.01, colors = 'blue')
+    lastX = ideal * 0.01
+    
+    ax.scatter(lastX, min(Ys), facecolors = 'w', edgecolors = 'b')
+   
+    
+    fig.canvas.draw()
+    ylabels = [item.get_text() for item in ax.get_yticklabels()]
+    inf = int(ylabels[-2])
+    ylabels[-2] = r"$\infty$"
+    ylabels.pop(-1)
+    ax.set_yticklabels(ylabels)
+    ax.get_yticklabels()[-2].set_fontsize(19)
+    ax.xaxis.set_ticks(np.arange(0,8000,1000))
+    ax.set(xlabel="Population Deviation",ylabel="Cut Edges")
+    
     
     for i_x, i_y in zip(Xs, Ys):
-        plt.text(i_x, i_y, '({}, {})'.format(i_x, i_y))
-    
-    a = 0
-    b = min(Xs)
-    plt.axvspan(a, b, color='y', alpha=0.5, lw=0)
+        plt.text(i_x, i_y, '({}, {})'.format(i_x, i_y), horizontalalignment = 'right')
         
-    plt.xlabel("Population Deviation")
-    plt.ylabel("Cut Edges")
+    plt.hlines(inf, 0, minimum_deviation, colors = 'red', linestyles = 'dashed')
+    ax.scatter(0, inf, facecolors = 'r', edgecolors = 'r')
+    ax.scatter(minimum_deviation, inf, facecolors = 'w', edgecolors = 'r')
+    
+        
+    a = minimum_deviation
+    b = min(Xs)
+    ybot = 1 - (5 / (max(Ys) - min(Ys) +7))
+    ytop = 1- ((max(Ys) + 5 - inf) / (max(Ys) + 7 - min(Ys)))
+    
+    if statusCode == 9: 
+        ax.axvspan(a, b, ymin = ybot, ymax = ytop, color='r', alpha=0.5, lw=0)
+    
+    
     fig.savefig(fn + "_pareto.png")
