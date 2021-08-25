@@ -22,11 +22,12 @@ import time
 import json
 import sys
 import os
+import numpy as np
+import mindev
 
 import labeling
 import ordering
 import fixing
-#import iterate
 
 from gerrychain import Graph
 import geopandas as gpd
@@ -91,7 +92,7 @@ def export_to_png(G, df, districts, filename):
 
 
 ################################################
-# Draws max B set and saves to png file
+# Draws max B set/mindev set and saves to png file
 ################################################ 
 
 def export_B_to_png(G, df, B, filename):
@@ -100,6 +101,17 @@ def export_B_to_png(G, df, B, filename):
     df['B'] = [1 if df['GEOID10'][u] in B_geoids else 0 for u in G.nodes]
         
     my_fig = df.plot(column='B').get_figure()
+    RESIZE_FACTOR = 3
+    my_fig.set_size_inches(my_fig.get_size_inches()*RESIZE_FACTOR)
+    plt.axis('off')
+    my_fig.savefig(filename)
+    
+def export_mindev_to_png(G, df, sol, filename):
+    
+    sol_geoids = [ G.nodes[i]["GEOID10"] for i in sol]
+    df['sol'] = [1 if df['GEOID10'][u] in sol_geoids else 0 for u in G.nodes]
+        
+    my_fig = df.plot(column='sol').get_figure()
     RESIZE_FACTOR = 3
     my_fig.set_size_inches(my_fig.get_size_inches()*RESIZE_FACTOR)
     plt.axis('off')
@@ -232,6 +244,35 @@ for key in batch_configs.keys():
     result['k'] = k
     result['n'] = G.number_of_nodes()
     result['m'] = G.number_of_edges()
+    
+    #mindev problem
+    
+    a = []
+    b = []
+    sol_a = []
+    sol_b = []
+    sol = []
+    
+    #append each optimal district for each node both from above and below
+    for i in range(G.number_of_nodes()):
+        a.append(mindev.find_ai(DG, i, k, population, U, sol_a))
+        b.append(mindev.find_bi(DG, i, k, population, U, sol_b))
+    
+    d = 0
+    
+    for i in G.nodes:
+        if a[i] > d and b[i] > d:
+            if a[i] <= b[i]:
+                d = a[i]
+                sol = sol_a[i]
+            else:
+                d = b[i]
+                sol = sol_b[i]
+                
+    fn_d = "../" + "results_for_" + config_filename_wo_extension + "/" + result['state'] + "-" + result['level'] + "-d.png"  
+
+    export_mindev_to_png(G, df, sol, fn_d)
+    minimum_deviation = d * k / (k-1)
            
     # read heuristic solution from external file (?)
 
@@ -269,10 +310,13 @@ for key in batch_configs.keys():
     m.addConstrs(gp.quicksum(population[i] * m._X[i,j] for i in DG.nodes) == m._P[j] for j in range(k))
     
     # Population balance: population assigned to district j should be in [L,U]
-    U_constraint = m.addConstrs(m._P[j] <= U for j in range(k))
-    L_constraint = m.addConstrs(m._P[j] >= L for j in range(k))
+    U_constraint = m.addConstrs(gp.quicksum(population[i] * m._X[i,j] for i in DG.nodes) <= U for j in range(k))
+    L_constraint = m.addConstrs(gp.quicksum(population[i] * m._X[i,j] for i in DG.nodes) >= L for j in range(k))
     m.update()
     
+    m.Params.IntFeasTol = 1.e-9
+    m.Params.FeasibilityTol = 1.e-9
+    m.update()    
                 
     ############################################   ONLY DO ONCE   
     # Add (extended?) objective 
@@ -316,8 +360,12 @@ for key in batch_configs.keys():
     
     statusCode = 2
     iteration = 1
-    
-    while (statusCode == 2 and iteration < 4):        
+    Xs = []
+    Ys = []
+    points = 0
+    currY = 0
+
+    while (statusCode == 2):        
     
         ####################################   
         # Variable fixing
@@ -375,6 +423,8 @@ for key in batch_configs.keys():
         # report best solution found
         if m.SolCount > 0:
             result['MIP_obj'] = int(m.objVal)
+            Ys.append(int(m.objVal)) 
+            points += 1
     
     
             labels = [ j for j in range(k) ]
@@ -415,10 +465,13 @@ for key in batch_configs.keys():
             result['max_dist'] = most
             result['min_dist'] = least
             result['found_dev'] = most - least
+            Xs.append(int(most-least))
             
         else:
             result['MIP_obj'] = 'no_solution_found'
             result['connected'] = 'n/a'
+            
+            
             
     
             
@@ -430,9 +483,78 @@ for key in batch_configs.keys():
         dev = max(most-ideal, ideal - least)
         U = ideal + (dev - 1)
         L = ideal - (dev - 1)
-        U_constraint.setAttr(GRB.Attr.RHS, U)
-        L_constraint.setAttr(GRB.Attr.RHS, L)
+        for j in range(k):
+            U_constraint[j].setAttr(GRB.Attr.RHS, U)
+            L_constraint[j].setAttr(GRB.Attr.RHS, L)
+
         m.update()
         
         iteration += 1
         print("Ideal population = ", ideal)
+        
+            
+    openX = []
+    openY = []
+    temp = points
+    
+    i = points - 1
+    while i >= 0:
+        if Ys[i] == currY:
+            Xs.pop(i)
+            Ys.pop(i)
+            points -= 1
+        else:
+            currY = Ys[i]
+        i -= 1
+    
+    for i in range(points - 1):
+        openX.append(Xs[i])
+        openY.append(Ys[i + 1])
+        
+    #Plotting Pareto Chart
+    fig, ax = plt.subplots(figsize =(12,6))
+    ax.set_xlim(-750, ideal * 0.011)
+    ax.set_ylim(min(Ys) - 2, max(Ys) + 5)
+    ax.scatter(openX, openY, facecolors = 'w', edgecolors = 'b')
+    ax.scatter(Xs, Ys)
+    ax.scatter(ideal * 0.01, Ys[0], edgecolors = 'b', facecolors = 'b')
+    ax.title.set_text("Unbalanced Window Population Deviation vs. Cut Edges for " + state)
+    
+    for i in range(points - 1):
+        plt.hlines(Ys[i + 1], Xs[i + 1], Xs[i], colors = 'blue')
+        
+    plt.hlines(Ys[0], max(Xs), ideal * 0.01, colors = 'blue')
+    lastX = ideal * 0.01
+    
+    ax.scatter(lastX, min(Ys), facecolors = 'w', edgecolors = 'b')
+   
+    
+    fig.canvas.draw()
+    ylabels = [item.get_text() for item in ax.get_yticklabels()]
+    inf = int(ylabels[-2])
+    ylabels[-2] = r"$\infty$"
+    ylabels.pop(-1)
+    ax.set_yticklabels(ylabels)
+    ax.get_yticklabels()[-2].set_fontsize(19)
+    ax.xaxis.set_ticks(np.arange(0,8000,1000))
+    ax.set(xlabel="Population Deviation",ylabel="Cut Edges")
+    
+    
+    for i_x, i_y in zip(Xs, Ys):
+        plt.text(i_x, i_y, '({}, {})'.format(i_x, i_y), horizontalalignment = 'right')
+        
+    plt.hlines(inf, 0, minimum_deviation, colors = 'red', linestyles = 'dashed')
+    ax.scatter(0, inf, facecolors = 'r', edgecolors = 'r')
+    ax.scatter(minimum_deviation, inf, facecolors = 'w', edgecolors = 'r')
+    
+        
+    a = minimum_deviation
+    b = min(Xs)
+    ybot = 1 - (5 / (max(Ys) - min(Ys) +7))
+    ytop = 1- ((max(Ys) + 5 - inf) / (max(Ys) + 7 - min(Ys)))
+    
+    if statusCode == 9: 
+        ax.axvspan(a, b, ymin = ybot, ymax = ytop, color='r', alpha=0.5, lw=0)
+    
+    
+    fig.savefig(fn + "_pareto.png")
