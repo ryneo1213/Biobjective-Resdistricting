@@ -1,5 +1,0 @@
-run,iteration,state,level,k,L,U,max_dev,n,m,heur_obj,heur_time,heur_iter,B_q,B_size,B_time,B_timelimit,DFixings,LFixings,UFixings_X,UFixings_R,ZFixings,MIP_obj,MIP_bound,MIP_time,MIP_timelimit,MIP_status,MIP_nodes,connected,max_dist,min_dist,found_dev
-run1,1,IA,county,4,757781,765396,7615,99,222,33,560.04,10000,4,85,60.02,60,6,346,1,11,16,33,33.0,160.19,3600,2,23176,True,763967.0,758443.0,5524.0
-run1,2,IA,county,4,758444.0,764732.0,6288.0,99,222,33,560.04,10000,4,85,60.02,60,0,0,0,0,16,33,33.0,156.32,3600,2,25302,True,763236.0,759886.0,3350.0
-run1,3,IA,county,4,759887.0,763289.0,3402.0,99,222,33,560.04,10000,4,85,60.02,60,0,0,0,0,16,35,35.0,1987.92,3600,2,153107,True,762602.0,760810.0,1792.0
-run1,4,IA,county,4,760575.0,762601.0,2026.0,99,222,33,560.04,10000,4,85,60.02,60,0,0,0,0,16,38,32.0,3600.11,3600,9,737695,True,762217.0,761143.0,1074.0
